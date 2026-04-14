@@ -389,8 +389,22 @@ class MangaTranslator:
         if self.verbose:
             try:
                 input_img = np.array(image)
-                if len(input_img.shape) == 3:  # 彩色图片，转换BGR顺序
-                    input_img = cv2.cvtColor(input_img, cv2.COLOR_RGB2BGR)
+
+                if len(input_img.shape) == 3:
+                    channels = input_img.shape[2]    
+                    if channels == 3:
+                        # 標準 RGB
+                        input_img = cv2.cvtColor(input_img, cv2.COLOR_RGB2BGR)
+                    elif channels == 4:
+                        # 帶透明度的 RGBA
+                        input_img = cv2.cvtColor(input_img, cv2.COLOR_RGBA2BGR)
+                    elif channels == 2:
+                        # 灰階+透明
+                        input_img = cv2.cvtColor(input_img[:, :, 0], cv2.COLOR_GRAY2BGR)
+                elif len(input_img.shape) == 2:
+                    # 純灰階圖 (只有高、寬兩個維度)
+                    input_img = cv2.cvtColor(input_img, cv2.COLOR_GRAY2BGR)
+
                 result_path = self._result_path('input.png')
                 success = cv2.imwrite(result_path, input_img)
                 if not success:
