@@ -1,6 +1,6 @@
 build-image:
 	docker rmi manga-image-translator || true
-	docker build . --tag=manga-image-translator
+	docker build . --tag=manga-image-translator --progress=plain
 
 run-web-server:
 	docker run --gpus all -p 5003:5003 --ipc=host --rm manga-image-translator \
@@ -12,5 +12,5 @@ run-web-server:
 		-v /demo/doc/../../result:/app/result \
 		-v /demo/doc/../../server/main.py:/app/server/main.py \
 		-v /demo/doc/../../server/instance.py:/app/server/instance.py \	
-		zyddnys/manga-image-translator:main \
+		./manga-image-translator:main \
 		server/main.py --verbose --start-instance --host=0.0.0.0 --port=5003 --use-gpu

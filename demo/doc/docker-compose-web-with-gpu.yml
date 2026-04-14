@@ -1,9 +1,9 @@
 services:
   manga_image_translator:
-    image: zyddnys/manga-image-translator:main
+    build: ./../../
     container_name: manga_image_translator_gpu
     entrypoint: python
-    command: server/main.py --verbose --start-instance --host=0.0.0.0 --port=5003 --use-gpu
+    command: server/main.py --verbose --start-instance --host=0.0.0.0 --port=5003 --use-gpu --nonce None
     volumes:
       - ./../../result:/app/result
       - ./../../server/main.py:/app/server/main.py
@@ -50,8 +50,8 @@ services:
       CAIYUN_TOKEN: ''  
       
       # Gemini  
-      GEMINI_API_KEY: ''  
-      GEMINI_MODEL: 'gemini-1.5-flash-002'  
+      GEMINI_API_KEY: ${GEMINI_API_KEY} 
+      GEMINI_MODEL: 'gemini-2.5-flash'  
       
       # DeepSeek  
       DEEPSEEK_API_KEY: ''  
