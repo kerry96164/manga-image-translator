@@ -7,6 +7,8 @@ services:
     tty: true
     restart: unless-stopped
     image: ollama/ollama:${OLLAMA_DOCKER_TAG-latest}
+    profiles:
+      - local-ai
     deploy:
       resources:
         reservations:
@@ -23,6 +25,8 @@ services:
       context: ../open-webui
       dockerfile: Dockerfile
     image: ghcr.io/open-webui/open-webui:${WEBUI_DOCKER_TAG-main}
+    profiles:
+      - local-ai
     container_name: open-webui
     volumes:
       - open-webui:/app/backend/data
