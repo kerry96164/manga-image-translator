@@ -14,8 +14,9 @@ class QueueElement:
     req: Request
     image: Image.Image | str
     config: Config
+    image_name: Optional[str]
 
-    def __init__(self, req: Request, image: Image.Image, config: Config, length):
+    def __init__(self, req: Request, image: Image.Image, config: Config, length, image_name: str = None):
         self.req = req
         if length > 10:
             #todo: store image in "upload-cache" folder
@@ -23,6 +24,7 @@ class QueueElement:
         else:
             self.image = image
         self.config = config
+        self.image_name = image_name
 
     def get_image(self)-> Image:
         if isinstance(self.image, str):
@@ -120,9 +122,9 @@ async def wait_in_queue(task: QueueElement | BatchQueueElement, notify: NotifyTy
                 else:
                     # Process single translation task
                     if notify:
-                        await instance.sent_stream(task.image, task.config, notify)
+                        await instance.sent_stream(task.image, task.config, notify, image_name=task.image_name)
                     else:
-                        result = await instance.sent(task.image, task.config)
+                        result = await instance.sent(task.image, task.config, image_name=task.image_name)
 
                 await executor_instances.free_executor(instance)
 

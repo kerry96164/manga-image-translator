@@ -1,0 +1,78 @@
+services:
+  ollama:
+    volumes:
+      - ollama:/root/.ollama
+    container_name: ollama
+    pull_policy: always
+    tty: true
+    restart: unless-stopped
+    image: ollama/ollama:${OLLAMA_DOCKER_TAG-latest}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: ${OLLAMA_GPU_DRIVER-nvidia}
+              count: ${OLLAMA_GPU_COUNT-1}
+              capabilities:
+                - gpu
+    networks:
+      - webui_net
+
+  open-webui:
+    build:
+      context: ../open-webui
+      dockerfile: Dockerfile
+    image: ghcr.io/open-webui/open-webui:${WEBUI_DOCKER_TAG-main}
+    container_name: open-webui
+    volumes:
+      - open-webui:/app/backend/data
+    depends_on:
+      - ollama
+    ports:
+      - ${OPEN_WEBUI_PORT-3000}:8080
+    environment:
+      - 'OLLAMA_BASE_URL=http://ollama:11434'
+      - 'WEBUI_SECRET_KEY='
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    restart: unless-stopped
+    networks:
+      - webui_net
+
+  manga-image-translator:
+    build: .
+    container_name: manga-image-translator
+    entrypoint: python
+    command: server/main.py --start-instance --host=0.0.0.0 --port=5003 --use-gpu --nonce None
+    volumes:
+      - ./result:/app/result
+      - ./server/main.py:/app/server/main.py
+      - ./server/instance.py:/app/server/instance.py
+      - ./models:/app/models
+    ports:
+      - 5003:5003
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY-}
+      - GEMINI_MODEL=${GEMINI_MODEL-gemini-2.5-flash}
+      - CUSTOM_OPENAI_API_KEY=ollama
+      - CUSTOM_OPENAI_API_BASE=http://ollama:11434/v1
+      - CUSTOM_OPENAI_MODEL=translategemma:4b
+    networks:
+      - webui_net
+    # depends_on:
+    #   - ollama
+    #   - open-webui
+
+networks:
+  webui_net:
+    driver: bridge
+
+volumes:
+  ollama: {}
+  open-webui: {}

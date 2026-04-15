@@ -15,11 +15,11 @@ class ExecutorInstance(BaseModel):
     def free_executor(self):
         self.busy = False
 
-    async def sent(self, image: Image, config: Config):
-        return await fetch_data("http://"+self.ip+":"+str(self.port)+"/simple_execute/translate", image, config)
+    async def sent(self, image: Image, config: Config, image_name: str = None):
+        return await fetch_data("http://"+self.ip+":"+str(self.port)+"/simple_execute/translate", image, config, image_name=image_name)
 
-    async def sent_stream(self, image: Image, config: Config, sender: NotifyType):
-        await fetch_data_stream("http://"+self.ip+":"+str(self.port)+"/execute/translate", image, config, sender)
+    async def sent_stream(self, image: Image, config: Config, sender: NotifyType, image_name: str = None):
+        await fetch_data_stream("http://"+self.ip+":"+str(self.port)+"/execute/translate", image, config, sender, image_name=image_name)
 
     async def sent_batch(self, images: List[Image.Image], config: Config, batch_size: int):
         """发送批量翻译请求"""

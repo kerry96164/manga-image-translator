@@ -615,6 +615,10 @@
                       class="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
                 Refresh
               </button>
+              <button v-if="finishedImages.length > 0" @click="downloadAllResults"
+                      class="px-3 py-1 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors">
+                Download All (ZIP)
+              </button>
               <button v-if="finishedImages.length > 0" @click="clearGallery"
                       class="px-3 py-1 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors">
                 Delete All
@@ -641,15 +645,25 @@
                 <div class="text-xs text-gray-600 truncate" :title="image.originalName">
                   {{ image.originalName }}
                 </div>
-                <div class="text-xs text-gray-400">
-                  {{ new Date(image.finishedAt).toLocaleDateString() }}
+                <div class="flex items-center justify-between mt-1">
+                  <div class="text-xs text-gray-400">
+                    {{ new Date(image.finishedAt).toLocaleDateString() }}
+                  </div>
+                  <div class="flex space-x-1">
+                    <!-- Download button -->
+                    <a :href="image.result" :download="image.originalName" @click.stop
+                       class="p-1 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors"
+                       title="Download this image">
+                      <i class="iconify w-3.5 h-3.5" data-icon="carbon:download"></i>
+                    </a>
+                    <!-- Delete button -->
+                    <button @click.stop="deleteImage(image)" 
+                            class="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                            title="Delete this image">
+                      <i class="iconify w-3.5 h-3.5" data-icon="carbon:trash-can"></i>
+                    </button>
+                  </div>
                 </div>
-                <!-- Delete button -->
-                <button @click.stop="deleteImage(image)" 
-                        class="mt-1 p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
-                        title="Delete this image">
-                  <i class="iconify w-3 h-3" data-icon="carbon:trash-can"></i>
-                </button>
               </div>
             </div>
           </div>
@@ -1145,6 +1159,29 @@
 
         toggleGallery() {
           this.showGallery = !this.showGallery;
+        },
+
+        async downloadAllResults() {
+          try {
+            const response = await fetch(`${BASE_URI}results/download-all`);
+            if (response.ok) {
+              const blob = await response.blob();
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `translated_manga_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.zip`;
+              document.body.appendChild(a);
+              a.click();
+              window.URL.revokeObjectURL(url);
+              document.body.removeChild(a);
+            } else {
+              const errorData = await response.json();
+              alert(`Download failed: ${errorData.detail || 'Unknown error'}`);
+            }
+          } catch (error) {
+            console.error('Error downloading all results:', error);
+            alert('Error downloading all results. Please try again.');
+          }
         },
 
         // Start translation for current file

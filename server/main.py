@@ -103,21 +103,21 @@ async def stream_image(req: Request, data: TranslateRequest) -> StreamingRespons
 async def json_form(req: Request, image: UploadFile = File(...), config: str = Form("{}")):
     img = await image.read()
     conf = Config.parse_raw(config)
-    ctx = await get_ctx(req, conf, img)
+    ctx = await get_ctx(req, conf, img, image_name=image.filename)
     return to_translation(ctx)
 
 @app.post("/translate/with-form/bytes", response_class=StreamingResponse, tags=["api", "form"],response_description="custom byte structure for decoding look at examples in 'examples/response.*'")
 async def bytes_form(req: Request, image: UploadFile = File(...), config: str = Form("{}")):
     img = await image.read()
     conf = Config.parse_raw(config)
-    ctx = await get_ctx(req, conf, img)
+    ctx = await get_ctx(req, conf, img, image_name=image.filename)
     return StreamingResponse(content=to_translation(ctx).to_bytes())
 
 @app.post("/translate/with-form/image", response_description="the result image", tags=["api", "form"],response_class=StreamingResponse)
 async def image_form(req: Request, image: UploadFile = File(...), config: str = Form("{}")) -> StreamingResponse:
     img = await image.read()
     conf = Config.parse_raw(config)
-    ctx = await get_ctx(req, conf, img)
+    ctx = await get_ctx(req, conf, img, image_name=image.filename)
     img_byte_arr = io.BytesIO()
     ctx.result.save(img_byte_arr, format="PNG")
     img_byte_arr.seek(0)
@@ -130,7 +130,7 @@ async def stream_json_form(req: Request, image: UploadFile = File(...), config: 
     conf = Config.parse_raw(config)
     # 标记这是Web前端调用，用于占位符优化
     conf._is_web_frontend = True
-    return await while_streaming(req, transform_to_json, conf, img)
+    return await while_streaming(req, transform_to_json, conf, img, image_name=image.filename)
 
 
 
@@ -138,16 +138,16 @@ async def stream_json_form(req: Request, image: UploadFile = File(...), config: 
 async def stream_bytes_form(req: Request, image: UploadFile = File(...), config: str = Form("{}"))-> StreamingResponse:
     img = await image.read()
     conf = Config.parse_raw(config)
-    return await while_streaming(req, transform_to_bytes, conf, img)
+    return await while_streaming(req, transform_to_bytes, conf, img, image_name=image.filename)
 
 @app.post("/translate/with-form/image/stream", response_class=StreamingResponse, tags=["api", "form"], response_description="Standard streaming endpoint - returns complete image data. Suitable for API calls and scripts.")
 async def stream_image_form(req: Request, image: UploadFile = File(...), config: str = Form("{}")) -> StreamingResponse:
-    """通用流式端点：返回完整图片数据，适用于API调用和comicread脚本"""
+    """通用流式端点：返回完整图片数据，適用於API调用和comicread脚本"""
     img = await image.read()
     conf = Config.parse_raw(config)
     # 标记为通用模式，不使用占位符优化
     conf._web_frontend_optimized = False
-    return await while_streaming(req, transform_to_image, conf, img)
+    return await while_streaming(req, transform_to_image, conf, img, image_name=image.filename)
 
 @app.post("/translate/with-form/image/stream/web", response_class=StreamingResponse, tags=["api", "form"], response_description="Web frontend optimized streaming endpoint - uses placeholder optimization for faster response.")
 async def stream_image_form_web(req: Request, image: UploadFile = File(...), config: str = Form("{}")) -> StreamingResponse:
@@ -156,7 +156,44 @@ async def stream_image_form_web(req: Request, image: UploadFile = File(...), con
     conf = Config.parse_raw(config)
     # 标记为Web前端优化模式，使用占位符优化
     conf._web_frontend_optimized = True
-    return await while_streaming(req, transform_to_image, conf, img)
+    return await while_streaming(req, transform_to_image, conf, img, image_name=image.filename)
+
+@app.post("/translate/texts", tags=["api", "json"])
+async def translate_texts(req: Request, data: dict):
+    """
+    僅翻譯文字列表的 API，用於前端批次彙整後的翻譯請求。
+    """
+    texts = data.get("texts", [])
+    config_dict = data.get("config", {})
+    from_lang = data.get("from_lang", "auto")
+    to_lang = data.get("to_lang", "CHS")
+    
+    if not texts:
+        return {"translations": []}
+        
+    conf = Config.parse_raw(json.dumps(config_dict))
+    
+    # 獲取翻譯器實例
+    from server.instance import executor_instances
+    instance = await executor_instances.find_executor()
+    
+    try:
+        # 我們利用 instance.sent 或是直接調用 get_translator (但需要 handle lifecycle)
+        # 這裡最穩妥是讓 backend executor (share mode) 暴露一個簡單的文字翻譯接口
+        # 但由於 executor 主要是處理 Image 的，我們這裡直接調用 core 邏輯
+        from manga_translator.translators import dispatch as dispatch_translation
+        from manga_translator.translators.common import TranslatorChain
+        
+        # 構造 translation chain
+        chain = TranslatorChain(conf.translator.translator, to_lang)
+        results = await dispatch_translation(chain, texts, conf.translator)
+        
+        # 釋放 executor (這裡其實没用到它，但為了保持 lock 邏輯一致)
+        await executor_instances.free_executor(instance)
+        return {"translations": results}
+    except Exception as e:
+        await executor_instances.free_executor(instance)
+        raise HTTPException(500, detail=str(e))
 
 @app.post("/queue-size", response_model=int, tags=["api", "json"])
 async def queue_size() -> int:
@@ -223,6 +260,53 @@ async def batch_images(req: Request, data: BatchTranslateRequest):
             media_type="application/zip",
             headers={"Content-Disposition": "attachment; filename=translated_images.zip"}
         )
+
+@app.get("/results/download-all", tags=["api"])
+async def download_all_results():
+    """Download all results as a ZIP file"""
+    import zipfile
+    import io
+    from datetime import datetime
+
+    result_dir = RESULT_ROOT
+    if not result_dir.exists():
+        raise HTTPException(404, detail="No results directory found")
+
+    # Create memory-based ZIP file
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        count = 0
+        for item_path in result_dir.iterdir():
+            if item_path.is_dir():
+                final_png_path = item_path / "final.png"
+                if final_png_path.exists():
+                    # 嘗試讀取原始檔案名稱
+                    original_name_path = item_path / "original_name.txt"
+                    if original_name_path.exists():
+                        try:
+                            file_name = original_name_path.read_text(encoding="utf-8").strip()
+                            # 確保副檔名正確
+                            if not file_name.lower().endswith('.png'):
+                                file_name = os.path.splitext(file_name)[0] + ".png"
+                        except Exception:
+                            file_name = f"{item_path.name}.png"
+                    else:
+                        file_name = f"{item_path.name}.png"
+                    
+                    zip_file.write(final_png_path, file_name)
+                    count += 1
+        
+        if count == 0:
+            raise HTTPException(404, detail="No translated images found to download")
+
+    zip_buffer.seek(0)
+    filename = f"manga_translations_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+    
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 @app.get("/", response_class=HTMLResponse,tags=["ui"])
 async def index() -> HTMLResponse:

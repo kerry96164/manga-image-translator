@@ -104,6 +104,7 @@ class MangaTranslator:
     batch_size: int
 
     def __init__(self, params: dict = None):
+        params = params or {}
         self.pre_dict = params.get('pre_dict', None)
         self.post_dict = params.get('post_dict', None)
         self.font_path = None
@@ -298,7 +299,7 @@ class MangaTranslator:
         if params.get('model_dir'):
             ModelWrapper._MODEL_DIR = params.get('model_dir')
         #todo: fix why is kernel size loaded in the constructor
-        self.kernel_size=int(params.get('kernel_size'))
+        self.kernel_size = int(params.get('kernel_size')) if params.get('kernel_size') else None
         # Set input files
         self.input_files = params.get('input', [])
         # Set save_text
@@ -357,13 +358,16 @@ class MangaTranslator:
     def using_gpu(self):
         return self.device.startswith('cuda') or self.device == 'mps'
 
-    async def translate(self, image: Image.Image, config: Config, image_name: str = None, skip_context_save: bool = False) -> Context:
+    async def translate(self, image: Image.Image, config: Config, image_name: str = None, skip_context_save: bool = False, 
+                        stop_at_ocr: bool = False, translation_list: List[str] = None) -> Context:
         """
         Translates a single image.
 
         :param image: Input image.
         :param config: Translation config.
         :param image_name: Deprecated parameter, kept for compatibility.
+        :param stop_at_ocr: If True, stop after OCR and return context with text regions.
+        :param translation_list: If provided, use these translations instead of calling a translator.
         :return: Translation context.
         """
         await self._report_progress('running_pre_translation_hooks')
@@ -377,6 +381,7 @@ class MangaTranslator:
         ctx.input = image
         ctx.result = None
         ctx.verbose = self.verbose
+        ctx.image_name = image_name
 
         # 设置图片上下文以生成调试图片子文件夹
         self._set_image_context(config, image)
@@ -426,9 +431,9 @@ class MangaTranslator:
                 await prepare_colorization(config.colorizer.colorizer)
 
         # translate
-        ctx = await self._translate(config, ctx)
+        ctx = await self._translate(config, ctx, stop_at_ocr=stop_at_ocr, translation_list=translation_list)
 
-        # 在翻译流程的最后保存翻译结果，确保保存的是最终结果（包括重试后的结果）
+        # 在翻译流程的最后保存翻译结果, 确保保存的是最终结果 (including retry results)
         # Save translation results at the end of translation process to ensure final results are saved
         if not skip_context_save and ctx.text_regions:
             # 汇总本页翻译，供下一页做上文
@@ -443,7 +448,7 @@ class MangaTranslator:
 
         return ctx
 
-    async def _translate(self, config: Config, ctx: Context) -> Context:
+    async def _translate(self, config: Config, ctx: Context, stop_at_ocr: bool = False, translation_list: List[str] = None) -> Context:
         # Start the background cleanup job once if not already started.
         if self._detector_cleanup_task is None:
             self._detector_cleanup_task = asyncio.create_task(self._detector_cleanup_job())
@@ -509,6 +514,20 @@ class MangaTranslator:
         await self._report_progress('ocr')
         try:
             ctx.textlines = await self._run_ocr(config, ctx)
+            
+            # Web模式優化：將 OCR 辨識到的原文傳送給前端，用於前端彙整批量翻譯
+            if hasattr(self, '_is_streaming_mode') and self._is_streaming_mode:
+                if ctx.textlines:
+                    # 彙整所有 textline 的文字
+                    ocr_texts = [line.text for line in ctx.textlines]
+                    import json
+                    # 使用 status 碼 1 (狀態更新) 發送特殊前綴的消息
+                    await self._report_progress(f"ocr_data:{json.dumps(ocr_texts, ensure_ascii=False)}")
+                else:
+                    await self._report_progress("ocr_data:[]")
+            
+            if stop_at_ocr:
+                return ctx
         except Exception as e:  
             logger.error(f"Error during ocr:\n{traceback.format_exc()}")  
             if not self.ignore_errors:  
@@ -556,7 +575,7 @@ class MangaTranslator:
         # -- Translation
         await self._report_progress('translating')
         try:
-            ctx.text_regions = await self._run_text_translation(config, ctx)
+            ctx.text_regions = await self._run_text_translation(config, ctx, translation_list=translation_list)
         except Exception as e:  
             logger.error(f"Error during translating:\n{traceback.format_exc()}")  
             if not self.ignore_errors:  
@@ -663,6 +682,14 @@ class MangaTranslator:
             if len(final_img.shape) == 3:  # 彩色图片，转换BGR顺序
                 final_img = cv2.cvtColor(final_img, cv2.COLOR_RGB2BGR)
             cv2.imwrite(self._result_path('final.png'), final_img)
+
+            # 保存原始文件名
+            if hasattr(ctx, 'image_name') and ctx.image_name:
+                try:
+                    with open(self._result_path('original_name.txt'), 'w', encoding='utf-8') as f:
+                        f.write(ctx.image_name)
+                except Exception as e:
+                    logger.error(f"Error saving original_name.txt: {e}")
 
             # 通知前端文件已就绪
             if hasattr(self, '_progress_hooks') and self._current_image_context:
@@ -1068,10 +1095,20 @@ class MangaTranslator:
             'cpu' if self._gpu_limited_memory else self.device
         )
 
-    async def _run_text_translation(self, config: Config, ctx: Context):
+    async def _run_text_translation(self, config: Config, ctx: Context, translation_list: List[str] = None):
         # 检查text_regions是否为None或空
         if not ctx.text_regions:
             return []
+
+        if translation_list is not None:
+            logger.info(f"Using provided translation list ({len(translation_list)} items)")
+            # 將傳入的譯文分配給 text_regions
+            for i, region in enumerate(ctx.text_regions):
+                if i < len(translation_list):
+                    region.translation = translation_list[i]
+                else:
+                    region.translation = ""
+            return ctx.text_regions
             
         # 如果设置了prep_manual则将translator设置为none，防止token浪费
         # Set translator to none to provent token waste if prep_manual is True  
@@ -1257,78 +1294,82 @@ class MangaTranslator:
 
         # 译后检查和重试逻辑 - 第二阶段：页面级目标语言检查（使用过滤后的区域）
         if config.translator.enable_post_translation_check:
-            
-            # 页面级目标语言检查（使用过滤后的区域数量）
-            page_lang_check_result = True
-            if ctx.text_regions and len(ctx.text_regions) > 5:
-                logger.info(f"Starting page-level target language check with {len(ctx.text_regions)} regions...")
-                page_lang_check_result = await self._check_target_language_ratio(
-                    ctx.text_regions,
-                    config.translator.target_lang,
-                    min_ratio=0.5
-                )
+            # 修正：不要進行頁面級目標語言檢查，避免將已翻譯的中文誤判為日文導致重複翻譯
+            # logger.info("Skipping page-level target language check as requested to avoid incorrect Japanese/Chinese detection.")
+            # page_lang_check_result = True
+            # if ctx.text_regions and len(ctx.text_regions) > 10:
+            #     logger.info(f"Starting page-level target language check with {len(ctx.text_regions)} regions...")
+            #     page_lang_check_result = await self._check_target_language_ratio(
+            #         ctx.text_regions,
+            #         config.translator.target_lang,
+            #         min_ratio=0.3
+            #     )
                 
-                if not page_lang_check_result:
-                    logger.warning("Page-level target language ratio check failed")
+            #     if not page_lang_check_result:
+            #         logger.warning("Page-level target language ratio check failed")
                     
-                    # 第二阶段：整个批次重新翻译逻辑
-                    max_batch_retry = config.translator.post_check_max_retry_attempts
-                    batch_retry_count = 0
+            #         # 第二阶段：整个批次重新翻译逻辑
+            #         max_batch_retry = config.translator.post_check_max_retry_attempts
+            #         batch_retry_count = 0
                     
-                    while batch_retry_count < max_batch_retry and not page_lang_check_result:
-                        batch_retry_count += 1
-                        logger.warning(f"Starting batch retry {batch_retry_count}/{max_batch_retry} for page-level target language check...")
+            #         while batch_retry_count < max_batch_retry and not page_lang_check_result:
+            #             batch_retry_count += 1
+            #             logger.warning(f"Starting batch retry {batch_retry_count}/{max_batch_retry} for page-level target language check...")
                         
-                        # 重新翻译所有区域
-                        original_texts = []
-                        for region in ctx.text_regions:
-                            if hasattr(region, 'text') and region.text:
-                                original_texts.append(region.text)
-                            else:
-                                original_texts.append("")
+            #             # 重新翻译所有区域
+            #             original_texts = []
+            #             for region in ctx.text_regions:
+            #                 if hasattr(region, 'text') and region.text:
+            #                     original_texts.append(region.text)
+            #                 else:
+            #                     original_texts.append("")
                         
-                        if original_texts:
-                            try:
-                                # 重新批量翻译
-                                logger.info(f"Retrying translation for {len(original_texts)} regions...")
-                                new_translations = await self._batch_translate_texts(original_texts, config, ctx)
+            #             if original_texts:
+            #                 try:
+            #                     # 重新批量翻译
+            #                     logger.info(f"Retrying translation for {len(original_texts)} regions...")
+            #                     new_translations = await self._batch_translate_texts(original_texts, config, ctx)
                                 
-                                # 更新翻译结果到regions
-                                for i, region in enumerate(ctx.text_regions):
-                                    if i < len(new_translations) and new_translations[i]:
-                                        old_translation = region.translation
-                                        region.translation = new_translations[i]
-                                        logger.debug(f"Region {i+1} translation updated: '{old_translation}' -> '{new_translations[i]}'")
+            #                     # 更新翻译结果到regions
+            #                     for i, region in enumerate(ctx.text_regions):
+            #                         if i < len(new_translations) and new_translations[i]:
+            #                             old_translation = region.translation
+            #                             region.translation = new_translations[i]
+            #                             logger.debug(f"Region {i+1} translation updated: '{old_translation}' -> '{new_translations[i]}'")
                                     
-                                # 重新检查目标语言比例
-                                logger.info(f"Re-checking page-level target language ratio after batch retry {batch_retry_count}...")
-                                page_lang_check_result = await self._check_target_language_ratio(
-                                    ctx.text_regions,
-                                    config.translator.target_lang,
-                                    min_ratio=0.5
-                                )
+            #                     # 重新检查目标语言比例
+            #                     logger.info(f"Re-checking page-level target language ratio after batch retry {batch_retry_count}...")
+            #                     page_lang_check_result = await self._check_target_language_ratio(
+            #                         ctx.text_regions,
+            #                         config.translator.target_lang,
+            #                         min_ratio=0.5
+            #                     )
                                 
-                                if page_lang_check_result:
-                                    logger.info(f"Page-level target language check passed")
-                                    break
-                                else:
-                                    logger.warning(f"Page-level target language check still failed")
+            #                     if page_lang_check_result:
+            #                         logger.info(f"Page-level target language check passed")
+            #                         break
+            #                     else:
+            #                         logger.warning(f"Page-level target language check still failed")
                                     
-                            except Exception as e:
-                                logger.error(f"Error during batch retry {batch_retry_count}: {e}")
-                                break
-                        else:
-                            logger.warning("No text found for batch retry")
-                            break
+            #                 except Exception as e:
+            #                     logger.error(f"Error during batch retry {batch_retry_count}: {e}")
+            #                     break
+            #             else:
+            #                 logger.warning("No text found for batch retry")
+            #                 break
                     
-                    if not page_lang_check_result:
-                        logger.error(f"Page-level target language check failed after all {max_batch_retry} batch retries")
-                else:
-                    logger.info("Page-level target language ratio check passed")
-            else:
-                logger.info(f"Skipping page-level target language check: only {len(ctx.text_regions)} regions (threshold: 5)")
+            #         if not page_lang_check_result:
+            #             logger.error(f"Page-level target language check failed after all {max_batch_retry} batch retries")
+            #     else:
+            #         logger.info("Page-level target language ratio check passed")
+            # else:
+            #     logger.info(f"Skipping page-level target language check: only {len(ctx.text_regions)} regions (threshold: 5)")
             
             # 统一的成功信息
+            logger.info("Skipping page-level target language check as requested to avoid incorrect Japanese/Chinese detection.")
+            page_lang_check_result = True
+            
+            # 使用统一的成功信息
             if page_lang_check_result:
                 logger.info("All translation regions passed post-translation check.")
             else:

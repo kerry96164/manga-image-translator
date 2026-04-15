@@ -50,18 +50,18 @@ async def to_pil_image(image: Union[str, bytes]) -> Image.Image:
         raise HTTPException(status_code=422, detail=str(e))
 
 
-async def get_ctx(req: Request, config: Config, image: str|bytes):
+async def get_ctx(req: Request, config: Config, image: str|bytes, image_name: str = None):
     image = await to_pil_image(image)
 
-    task = QueueElement(req, image, config, 0)
+    task = QueueElement(req, image, config, 0, image_name=image_name)
     task_queue.add_task(task)
 
     return await wait_in_queue(task, None)
 
-async def while_streaming(req: Request, transform, config: Config, image: bytes | str):
+async def while_streaming(req: Request, transform, config: Config, image: bytes | str, image_name: str = None):
     image = await to_pil_image(image)
 
-    task = QueueElement(req, image, config, 0)
+    task = QueueElement(req, image, config, 0, image_name=image_name)
     task_queue.add_task(task)
 
     messages = asyncio.Queue()
