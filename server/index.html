@@ -319,7 +319,7 @@
             </div>
           </div>
 
-          <!-- ファイルアップロードエリア -->
+          <!-- 檔案上傳區域 -->
           <label
             v-else
             class="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-md p-8 h-72 cursor-pointer hover:border-blue-400 transition-colors py-57"
@@ -329,7 +329,7 @@
             @dragleave.prevent
             @drop.prevent="ondrop"
           >
-            <!-- 選択済みファイルがある場合 -->
+            <!-- 選擇單一檔案時 -->
             <div
               v-if="file"
               class="flex flex-col items-center gap-4 text-center"
@@ -340,7 +340,7 @@
                   class="iconify-inline inline-block mr-2 text-xl"
                   data-icon="carbon:image-search"
                 ></span>
-                File Preview
+                預覽圖片
               </div>
               <img
                 class="max-w-[18rem] max-h-[18rem] rounded-md border border-gray-200"
@@ -353,7 +353,7 @@
                   class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-500"
                   style="color: white !important; background-color: #4B5563 !important;"
                 >
-                  Clear
+                  清除
                 </button>
                 <button
                   type="button"
@@ -361,18 +361,18 @@
                   class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-blue-500 border border-green-500"
                   style="color: white !important; background-color: #059669 !important;"
                 >
-                  Start Translating
+                  開始翻譯
                 </button>
               </div>
               <div class="text-sm text-gray-500">
-                Click the empty space or paste/drag a new one to replace
+                點擊空白處或貼上/拖入新圖片以替換
               </div>
             </div>
-            <!-- 複数ファイルが選択された場合 -->
+            <!-- 選擇多個檔案時 -->
             <div v-else-if="selectedFiles.length > 0" class="flex flex-col items-center gap-4 text-center">
               <i class="iconify w-8 h-8 text-blue-500" data-icon="carbon:document-multiple"></i>
               <div class="text-gray-700">
-                <span class="font-medium">{{ selectedFiles.length }}</span> files selected
+                已選擇 <span class="font-medium">{{ selectedFiles.length }}</span> 個檔案
               </div>
               <div class="max-h-32 overflow-y-auto w-full">
                 <div v-for="file in selectedFiles.slice(0, 5)" :key="file.name"
@@ -380,7 +380,7 @@
                   {{ file.name }}
                 </div>
                 <div v-if="selectedFiles.length > 5" class="text-sm text-gray-500">
-                  ... and {{ selectedFiles.length - 5 }} more files
+                  ... 以及其他 {{ selectedFiles.length - 5 }} 個檔案
                 </div>
               </div>
               <div class="flex space-x-2">
@@ -390,7 +390,7 @@
                   class="px-3 py-1 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                   style="color: white !important; background-color: #4B5563 !important;"
                 >
-                  Clear
+                  清除
                 </button>
                 <button
                   type="button"
@@ -398,11 +398,11 @@
                   class="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                   style="color: white !important; background-color: #2563EB !important;"
                 >
-                  Add to Queue
+                  加入佇列
                 </button>
               </div>
             </div>
-            <!-- まだファイルがない場合 -->
+            <!-- 尚未選擇檔案時 -->
             <div v-else class="flex flex-col items-center gap-2 text-center">
 
               <i
@@ -410,23 +410,23 @@
                 data-icon="carbon:cloud-upload"
               ></i>
               <div class="text-gray-600">
-                Paste images, click to select multiple, or drag and drop here
+                貼上圖片、點擊選擇多個檔案、或將檔案拖曳至此
               </div>
               <div class="text-sm text-gray-500">
-                Supports multiple file selection (Ctrl/Cmd + click)
+                支援多檔案選擇 (Ctrl/Cmd + 點擊)
               </div>
               <div class="flex space-x-2 mt-2">
                 <button
                   @click="selectMultipleFiles"
                   class="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm transition-colors">
                   <i class="iconify inline-block mr-1" data-icon="carbon:folder-add"></i>
-                  Multiple Files
+                  多個檔案
                 </button>
                 <button
                   @click="selectFolder"
                   class="px-3 py-1 bg-purple-600 text-white rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm transition-colors">
                   <i class="iconify inline-block mr-1" data-icon="carbon:folder"></i>
-                  Folder
+                  資料夾
                 </button>
               </div>
             </div>
@@ -443,56 +443,31 @@
           </label>
         </div>
 
-        <!-- フッターリンク -->
-        <div
-          class="flex flex-col sm:flex-row items-center justify-center gap-4 text-sm text-gray-600 mt-4"
-        >
-          <div>
-            Please consider supporting us by
-            <a
-              class="underline text-blue-600 hover:text-blue-800"
-              href="https://ko-fi.com/voilelabs"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Ko-fi
-            </a>
-            or
-            <a
-              class="underline text-blue-600 hover:text-blue-800"
-              href="https://www.patreon.com/voilelabs"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Patreon
-            </a>
-            !
-          </div>
           <a
             class="underline text-blue-600 hover:text-blue-800"
             href="https://github.com/zyddnys/manga-image-translator"
             target="_blank"
             rel="noopener noreferrer"
           >
-            Source Code
+            原始碼 (GitHub)
           </a>
         </div>
 
 
-        <!-- Image Queue Section -->
+        <!-- 翻譯佇列區域 -->
         <div class="border-t pt-6 mt-6">
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg font-semibold text-gray-800">
-              Translation Queue ({{ queuedImages.length }})
+              翻譯佇列 ({{ queuedImages.length }})
             </h3>
             <div class="flex space-x-2">
               <button @click="skipCurrentTranslation"
                       class="px-3 py-1 text-sm bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors">
-                Skip Current
+                跳過目前項目
               </button>
               <button @click="clearFinishedItems"
                       class="px-3 py-1 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
-                Clear Finished
+                清除已完成
               </button>
             </div>
           </div>
@@ -500,8 +475,8 @@
           <!-- Queue is empty message -->
           <div v-if="queuedImages.length === 0" class="text-center py-8 text-gray-500">
             <i class="iconify w-8 h-8 mx-auto mb-2 text-gray-300" data-icon="carbon:list"></i>
-            <p>No images in queue</p>
-            <p class="text-sm">Upload an image and click "Start Translating" to begin</p>
+            <p>佇列中沒有圖片</p>
+            <p class="text-sm">請上傳圖片並點擊「開始翻譯」</p>
           </div>
           
                     <!-- Queue items -->
@@ -521,10 +496,10 @@
                   {{ queuedImage.file.name }}
                 </div>
                 <div class="text-xs text-gray-500">
-                  Added: {{ queuedImage.addedAt.toLocaleTimeString() }}
+                  加入時間：{{ queuedImage.addedAt.toLocaleTimeString() }}
                 </div>
                 <div class="text-xs text-gray-500">
-                  Size: {{ formatSize(queuedImage.file.size) }}
+                  檔案大小：{{ formatSize(queuedImage.file.size) }}
                 </div>
                 
                 <!-- Progress bar for processing items -->
@@ -545,11 +520,11 @@
                        'bg-green-100 text-green-800': queuedImage.status === 'finished',
                        'bg-red-100 text-red-800': queuedImage.status === 'error'
                      }">
-                  {{ queuedImage.status === 'queued' ? 'Queued' : 
-                     queuedImage.status === 'processing' ? 'Processing' :
-                     queuedImage.status === 'upload' ? 'Uploading' :
-                     queuedImage.status === 'finished' ? 'Finished' : 
-                     queuedImage.status === 'error' ? 'Error' : getStepName(queuedImage.status) }}
+                  {{ queuedImage.status === 'queued' ? '等待中' : 
+                     queuedImage.status === 'processing' ? '處理中' :
+                     queuedImage.status === 'upload' ? '上傳中' :
+                     queuedImage.status === 'finished' ? '已完成' : 
+                     queuedImage.status === 'error' ? '錯誤' : getStepName(queuedImage.status) }}
                 </div>
                 
                 <!-- Show step progress if processing -->
@@ -568,7 +543,7 @@
                 <!-- Show queue position if processing -->
                 <div v-if="queuedImage.status === 'processing' && queuedImage.queuePos" 
                      class="text-xs text-blue-600">
-                  Position: {{ queuedImage.queuePos }}
+                  佇列位置：{{ queuedImage.queuePos }}
                 </div>
                 
                 <!-- Show error if any -->
@@ -580,7 +555,7 @@
                 <!-- Remove button for all items -->
                 <button @click="removeFromQueue(queuedImage.id)"
                         class="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                        :title="queuedImage.status === 'processing' ? 'Cancel translation' : 'Remove from queue'">
+                        :title="queuedImage.status === 'processing' ? '取消翻譯' : '從佇列移除'">
                   <i class="iconify w-4 h-4" data-icon="carbon:close"></i>
                 </button>
                 
@@ -588,7 +563,7 @@
                 <button v-if="queuedImage.status === 'processing'" 
                         @click="markAsFinished(queuedImage.id)"
                         class="p-1 text-gray-400 hover:text-green-500 transition-colors"
-                        title="Mark as finished (testing)">
+                        title="標記為完成 (測試用)">
                   <i class="iconify w-4 h-4" data-icon="carbon:checkmark"></i>
                 </button>
               </div>
@@ -596,32 +571,32 @@
           </div>
         </div>
 
-        <!-- Results Gallery Section -->
+        <!-- 翻譯結果圖庫區域 -->
         <div class="border-t pt-6 mt-6">
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg font-semibold text-gray-800">
-              Translation Results ({{ finishedImages.length }})
+              翻譯結果 ({{ finishedImages.length }})
             </h3>
             <div class="flex space-x-2">
               <button @click="toggleGallery" 
                       class="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
-                {{ showGallery ? 'Hide' : 'Show' }} Gallery
+                {{ showGallery ? '隱藏' : '顯示' }} 圖庫
               </button>
               <button @click="syncGalleryWithResults"
                       class="px-3 py-1 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
-                Sync with Results
+                同步伺服器
               </button>
               <button @click="refreshGallery"
                       class="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
-                Refresh
+                重新整理
               </button>
               <button v-if="finishedImages.length > 0" @click="downloadAllResults"
                       class="px-3 py-1 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors">
-                Download All (ZIP)
+                全部下載 (ZIP)
               </button>
               <button v-if="finishedImages.length > 0" @click="clearGallery"
                       class="px-3 py-1 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors">
-                Delete All
+                刪除全部
               </button>
             </div>
           </div>
@@ -634,7 +609,7 @@
                  @click="openImageModal(image)">
               <div class="relative aspect-square overflow-hidden rounded-t-lg">
                 <img :src="image.result" 
-                     :alt="'Translated: ' + image.originalName"
+                     :alt="'已翻譯：' + image.originalName"
                      class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200">
                 <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center">
                   <i class="iconify w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200"
@@ -653,7 +628,7 @@
                     <!-- Download button -->
                     <a :href="image.result" :download="image.originalName" @click.stop
                        class="p-1 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors"
-                       title="Download this image">
+                       title="下載此圖片">
                       <i class="iconify w-3.5 h-3.5" data-icon="carbon:download"></i>
                     </a>
                     <!-- Delete button -->
@@ -857,10 +832,11 @@
           "original",
         ],
         getTranslatorName(key) {
-          if (key === "none") return "No Text";
+          if (key === "none") return "不翻譯 (僅塗改)";
+          if (key === "original") return "保留原文";
           return key ? key[0].toUpperCase() + key.slice(1) : "";
         },
-        targetLanguage: "CHS",
+        targetLanguage: "CHT",
         inpaintingSize: "2048",
         customUnclipRatio: 2.3,
         customBoxThreshold: 0.7,
@@ -1440,43 +1416,43 @@
         },
         get _statusText() {
           if (this.status === 'error') {
-            return this.errorMessage || "Something went wrong, please try again";
+            return this.errorMessage || "發生錯誤，請重試";
           }
           switch (this.status) {
             case "upload":
               return this.progress
-                ? `Uploading (${this.progress})`
-                : "Uploading";
+                ? `正在上傳 (${this.progress})`
+                : "正在上傳";
             case "pending":
               return this.queuePos
-                ? `Queuing, your position is ${this.queuePos}`
-                : "Processing";
+                ? `佇列等待中，您的位置是 ${this.queuePos}`
+                : "處理中";
             case "detection":
-              return "Detecting texts";
+              return "正在偵測文字";
             case "ocr":
-              return "Running OCR";
+              return "正在執行 OCR";
             case "mask-generation":
-              return "Generating text mask";
+              return "正在生成文字遮罩";
             case "inpainting":
-              return "Running inpainting";
+              return "正在進行塗改";
             case "upscaling":
-              return "Running upscaling";
+              return "正在進行放大";
             case "translating":
-              return "Translating";
+              return "正在翻譯";
             case "rendering":
-              return "Rendering translated texts";
+              return "正在渲染翻譯後的文字";
             case "finished":
-              return "Downloading image";
+              return "正在下載圖片";
             case "error-upload":
-              return "Upload failed, please try again";
+              return "上傳失敗，請重試";
             case "error-lang":
-              return "Your target language is not supported by the chosen translator";
+              return "所選翻譯器不支援您的目標語言";
             case "error-translating":
-              return "Did not get any text back from the text translation service";
+              return "未從翻譯服務獲取任何文字";
             case "error-too-large":
-              return "Image size too large (greater than 8000x8000 px)";
+              return "圖片尺寸太大 (超過 8000x8000 像素)";
             case "error-disconnect":
-              return "Lost connection to server";
+              return "與伺服器斷開連接";
           }
         },
         get error() {
@@ -1797,27 +1773,29 @@
 
     // Get user-friendly step name
     getStepName(step) {
+      if (!step || step === 'queued') return '等待中';
       const stepNames = {
-        'upload': 'Uploading',
-        'pending': 'Queuing',
-        'detection': 'Detecting texts',
-        'ocr': 'Running OCR',
-        'mask-generation': 'Generating text mask',
-        'inpainting': 'Running inpainting',
-        'upscaling': 'Running upscaling',
-        'translating': 'Translating',
-        'rendering': 'Rendering translated texts',
-        'finished': 'Finished'
+        'upload': '上傳中',
+        'pending': '等待處理',
+        'detection': '正在偵測文字',
+        'ocr': '正在執行 OCR',
+        'mask-generation': '正在生成文字遮罩',
+        'inpainting': '正在進行塗改',
+        'upscaling': '正在進行放大',
+        'translating': '正在翻譯',
+        'rendering': '正在渲染文字',
+        'finished': '已完成',
+        'error': '發生錯誤'
       };
       return stepNames[step] || step;
     },
 
-    // Clear finished items from queue
+    // 從佇列中清除已完成項目
     clearFinishedItems() {
       console.log("clearFinishedItems called");
       console.log("Before clearing:", this.queuedImages.map(item => ({ id: item.id, status: item.status })));
       
-      // Only clear items that are actually finished, not just have 'finished' status
+      // 僅清除標記為已完成或錯誤的項目
       this.queuedImages = this.queuedImages.filter(item => 
         item.status !== 'finished' && item.status !== 'error'
       );
@@ -1825,7 +1803,7 @@
       console.log("After clearing:", this.queuedImages.map(item => ({ id: item.id, status: item.status })));
     },
 
-    // Skip current translation and move to next
+    // 跳過目前的翻譯並移動到下一個
     skipCurrentTranslation() {
       console.log('Skip current translation called');
       console.log('Current queued images:', this.queuedImages);
@@ -1837,20 +1815,20 @@
         const processingItem = this.queuedImages[processingItemIndex];
         console.log('Found processing item:', processingItem);
         
-        // Abort current translation
+        // 中止目前的翻譯上傳
         this.uploadController?.abort();
         console.log('Aborted upload controller');
         
-        // Mark current item as skipped/error
+        // 將目前項目標記為已跳過/錯誤
         this.queuedImages[processingItemIndex] = {
           ...processingItem,
           status: 'error',
-          error: 'Skipped by user'
+          error: '使用者跳過'
         };
         
         console.log('Marked item as skipped');
         
-        // Clear finished/error items and move to next
+        // 清除已完成/錯誤的項目並移動到下一個
         setTimeout(() => {
           this.clearFinishedItems();
           this.processNextInQueue();
@@ -1859,7 +1837,7 @@
       }
     },
 
-    // Manually mark an item as finished (for testing)
+    // 手動將項目標記為已完成 (測試用)
     markAsFinished(id) {
       const item = this.queuedImages.find(img => img.id === id);
       if (item && item.status === 'processing') {
@@ -1870,27 +1848,27 @@
           result: `${BASE_URI}result/${this.currentFolder || 'test'}/final.png`
         };
         
-        // Add to finished images gallery
+        // 加入圖庫
         this.addToFinishedImages({
           name: item.file.name,
           result: `${BASE_URI}result/${this.currentFolder || 'test'}/final.png`
         });
         
-        // Clear finished items from queue after a delay
+        // 延遲後從佇列清除
         setTimeout(() => {
           this.clearFinishedItems();
         }, 2000);
         
-        // Auto-process next item in queue
+        // 自動處理下一個項目
         setTimeout(() => {
           this.processNextInQueue();
         }, 1000);
       }
     },
 
-    // Delete an image from the finished gallery
+    // 從圖庫刪除圖片
     deleteImage(image) {
-      if (confirm(`Are you sure you want to delete "${image.originalName}"? This action cannot be undone.`)) {
+      if (confirm(`確定要刪除 "${image.originalName}" 嗎？此動作無法復原。`)) {
         this.deleteImageFromServer(image);
       }
     },
