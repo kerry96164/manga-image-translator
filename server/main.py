@@ -63,15 +63,25 @@ def transform_to_image(ctx):
     return img_byte_arr.getvalue()
 
 def transform_to_json(ctx):
+    if isinstance(ctx, list):
+        return [to_translation(c).model_dump() for c in ctx]
     return to_translation(ctx).model_dump_json().encode("utf-8")
 
 def transform_to_bytes(ctx):
+    if isinstance(ctx, list):
+        # 對於 bytes，如果是一個列表，我們簡單地將它們連接起來，或者可以定義一個更複雜的結構
+        return b"".join([to_translation(c).to_bytes() for c in ctx])
     return to_translation(ctx).to_bytes()
 
 @app.post("/translate/json", response_model=TranslationResponse, tags=["api", "json"],response_description="json strucure inspired by the ichigo translator extension")
 async def json(req: Request, data: TranslateRequest):
     ctx = await get_ctx(req, data.config, data.image)
     return to_translation(ctx)
+
+@app.post("/translate/batch/json", tags=["api", "json"])
+async def batch_json(req: Request, data: BatchTranslateRequest):
+    contexts = await get_batch_ctx(req, data.config, data.images, data.batch_size)
+    return [to_translation(ctx) for ctx in contexts]
 
 @app.post("/translate/bytes", response_class=StreamingResponse, tags=["api", "json"],response_description="custom byte structure for decoding look at examples in 'examples/response.*'")
 async def bytes(req: Request, data: TranslateRequest):
@@ -157,6 +167,23 @@ async def stream_image_form_web(req: Request, image: UploadFile = File(...), con
     # 标记为Web前端优化模式，使用占位符优化
     conf._web_frontend_optimized = True
     return await while_streaming(req, transform_to_image, conf, img, image_name=image.filename)
+
+@app.post("/translate/with-form/batch/stream/web", response_class=StreamingResponse, tags=["api", "form"])
+async def stream_batch_form_web(req: Request, images: list[UploadFile] = File(...), config: str = Form("{}")) -> StreamingResponse:
+    """Web前端专用的批次流式端点"""
+    pil_images = []
+    image_names = []
+    for image in images:
+        img_bytes = await image.read()
+        pil_images.append(img_bytes)
+        image_names.append(image.filename)
+    
+    conf = Config.parse_raw(config)
+    # 标记为Web前端优化模式，使用占位符优化
+    conf._web_frontend_optimized = True
+    
+    from server.request_extraction import while_batch_streaming
+    return await while_batch_streaming(req, transform_to_image, conf, pil_images, image_names=image_names)
 
 @app.post("/translate/texts", tags=["api", "json"])
 async def translate_texts(req: Request, data: dict):

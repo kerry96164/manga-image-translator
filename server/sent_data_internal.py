@@ -9,8 +9,11 @@ from manga_translator import Config
 
 NotifyType = Optional[Callable[[int, Optional[bytes]], None]]
 
-async def fetch_data_stream(url, image: Image, config: Config, sender: NotifyType, image_name: str = None, headers: Mapping[str, str] = {}):
-    attributes = {"image": image, "config": config, "image_name": image_name}
+async def fetch_data_stream(url, image: Image, config: Config, sender: NotifyType, image_name: str = None, headers: Mapping[str, str] = {}, custom_data: dict = None):
+    if custom_data:
+        attributes = custom_data
+    else:
+        attributes = {"image": image, "config": config, "image_name": image_name}
     data = pickle.dumps(attributes)
 
     async with aiohttp.ClientSession() as session:
@@ -20,8 +23,11 @@ async def fetch_data_stream(url, image: Image, config: Config, sender: NotifyTyp
             else:
                 raise HTTPException(response.status, detail=await response.text())
 
-async def fetch_data(url, image: Image, config: Config, image_name: str = None, headers: Mapping[str, str] = {}):
-    attributes = {"image": image, "config": config, "image_name": image_name}
+async def fetch_data(url, image: Image, config: Config, image_name: str = None, headers: Mapping[str, str] = {}, custom_data: dict = None):
+    if custom_data:
+        attributes = custom_data
+    else:
+        attributes = {"image": image, "config": config, "image_name": image_name}
     data = pickle.dumps(attributes)
 
     async with aiohttp.ClientSession() as session:

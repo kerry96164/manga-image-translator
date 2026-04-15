@@ -277,6 +277,54 @@
           </div>
         </div>
 
+        <!-- LLM Settings Layer -->
+        <div v-if="['openai', 'gemini', 'deepseek', 'custom_openai'].includes(translator)" class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div class="flex items-center gap-2 mb-3">
+            <i class="iconify text-blue-600 w-5 h-5" data-icon="carbon:settings-adjust"></i>
+            <span class="font-semibold text-blue-800">LLM 翻譯設定</span>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- OpenAI / DeepSeek / Custom -->
+            <template v-if="translator === 'openai' || translator === 'deepseek' || translator === 'custom_openai'">
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium text-blue-700">API Key</label>
+                <input type="password" v-model="openaiApiKey" @change="onSettingChange" 
+                       class="bg-white border border-blue-200 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-400 outline-none"
+                       placeholder="sk-...">
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium text-blue-700">API Base (Optional)</label>
+                <input type="text" v-model="openaiApiBase" @change="onSettingChange"
+                       class="bg-white border border-blue-200 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-400 outline-none"
+                       placeholder="https://api.openai.com/v1">
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium text-blue-700">Model Name</label>
+                <input type="text" v-model="openaiModel" @change="onSettingChange"
+                       class="bg-white border border-blue-200 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-400 outline-none"
+                       placeholder="gpt-4o / deepseek-chat">
+              </div>
+            </template>
+
+            <!-- Gemini Specific -->
+            <template v-if="translator === 'gemini'">
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium text-blue-700">Gemini API Key</label>
+                <input type="password" v-model="geminiApiKey" @change="onSettingChange"
+                       class="bg-white border border-blue-200 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-400 outline-none"
+                       placeholder="AIza...">
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium text-blue-700">Gemini Model</label>
+                <input type="text" v-model="geminiModel" @change="onSettingChange"
+                       class="bg-white border border-blue-200 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-400 outline-none"
+                       placeholder="gemini-2.0-flash">
+              </div>
+            </template>
+          </div>
+        </div>
+
         <!-- メインコンテンツエリア -->
         <div>
           <!-- 結果表示 -->
@@ -394,11 +442,23 @@
                 </button>
                 <button
                   type="button"
-                  @click="addSelectedFilesToQueue"
+                  @click="batchAll = false; addSelectedFilesToQueue()"
                   class="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                   style="color: white !important; background-color: #2563EB !important;"
+                  title="逐一對每張圖片進行 OCR 與翻譯"
                 >
-                  加入佇列
+                  <i class="iconify inline-block mr-1" data-icon="carbon:document"></i>
+                  單頁翻譯 (逐一進行)
+                </button>
+                <button
+                  type="button"
+                  @click="batchAll = true; addSelectedFilesToQueue()"
+                  class="px-3 py-1 bg-orange-600 text-white rounded-md hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm transition-colors"
+                  style="color: white !important; background-color: #EA580C !important;"
+                  title="先對所有圖片進行 OCR 辨識，完成後再一次翻譯全部文字，能顯著減少與翻譯伺服器的連線等待次數"
+                >
+                  <i class="iconify inline-block mr-1" data-icon="carbon:checkmark-filled"></i>
+                  全部翻譯 (批次進行)
                 </button>
               </div>
             </div>
@@ -489,21 +549,29 @@
                  class="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg border">
               <!-- Image preview -->
               <div class="w-16 h-16 flex-shrink-0">
-                <img :src="URL.createObjectURL(queuedImage.file)" 
+                <img v-if="queuedImage.isBatch && queuedImage.files && queuedImage.files[0]"
+                     :src="URL.createObjectURL(queuedImage.files[0])" 
+                     :alt="queuedImage.name"
+                     class="w-full h-full object-cover rounded shadow-sm border border-gray-200">
+                <img v-else-if="queuedImage.file"
+                     :src="URL.createObjectURL(queuedImage.file)" 
                      :alt="queuedImage.file.name"
-                     class="w-full h-full object-cover rounded">
+                     class="w-full h-full object-cover rounded shadow-sm border border-gray-200">
+                <div v-else class="w-full h-full flex items-center justify-center bg-gray-200 rounded">
+                  <i class="iconify text-gray-400" data-icon="carbon:document-multiple"></i>
+                </div>
               </div>
               
               <!-- Image info -->
               <div class="flex-1 min-w-0">
                 <div class="text-sm font-medium text-gray-900 truncate">
-                  {{ queuedImage.file.name }}
+                  {{ queuedImage.isBatch ? queuedImage.name : (queuedImage.file ? queuedImage.file.name : 'Unknown') }}
                 </div>
                 <div class="text-xs text-gray-500">
                   加入時間：{{ queuedImage.addedAt.toLocaleTimeString() }}
                 </div>
                 <div class="text-xs text-gray-500">
-                  檔案大小：{{ formatSize(queuedImage.file.size) }}
+                  檔案大小：{{ queuedImage.isBatch ? '多個檔案' : (queuedImage.file ? formatSize(queuedImage.file.size) : '-') }}
                 </div>
                 
                 <!-- Progress bar for processing items -->
@@ -846,6 +914,17 @@
         customBoxThreshold: 0.7,
         maskDilationOffset: 30,
         inpainter: "lama_large",
+        batchAll: false,
+
+        // LLM specific settings
+        openaiApiKey: "",
+        openaiApiBase: "",
+        openaiModel: "",
+        geminiApiKey: "",
+        geminiModel: "",
+        customLlmApiKey: "",
+        customLlmApiBase: "",
+        customLlmModel: "",
 
         uploadController: null,
 
@@ -870,6 +949,16 @@
               if (settings.customBoxThreshold) this.customBoxThreshold = settings.customBoxThreshold;
               if (settings.maskDilationOffset) this.maskDilationOffset = settings.maskDilationOffset;
               if (settings.inpainter) this.inpainter = settings.inpainter;
+              
+              // LLM Settings
+              if (settings.openaiApiKey) this.openaiApiKey = settings.openaiApiKey;
+              if (settings.openaiApiBase) this.openaiApiBase = settings.openaiApiBase;
+              if (settings.openaiModel) this.openaiModel = settings.openaiModel;
+              if (settings.geminiApiKey) this.geminiApiKey = settings.geminiApiKey;
+              if (settings.geminiModel) this.geminiModel = settings.geminiModel;
+              if (settings.customLlmApiKey) this.customLlmApiKey = settings.customLlmApiKey;
+              if (settings.customLlmApiBase) this.customLlmApiBase = settings.customLlmApiBase;
+              if (settings.customLlmModel) this.customLlmModel = settings.customLlmModel;
             }
           } catch (error) {
             console.warn('Failed to load settings:', error);
@@ -889,6 +978,14 @@
               customBoxThreshold: this.customBoxThreshold,
               maskDilationOffset: this.maskDilationOffset,
               inpainter: this.inpainter,
+              openaiApiKey: this.openaiApiKey,
+              openaiApiBase: this.openaiApiBase,
+              openaiModel: this.openaiModel,
+              geminiApiKey: this.geminiApiKey,
+              geminiModel: this.geminiModel,
+              customLlmApiKey: this.customLlmApiKey,
+              customLlmApiBase: this.customLlmApiBase,
+              customLlmModel: this.customLlmModel,
             };
             localStorage.setItem('manga-translator-settings', JSON.stringify(settings));
           } catch (error) {
@@ -973,19 +1070,36 @@
           // Clear any finished items from queue first
           this.clearFinishedItems();
           
-          files.forEach((file, index) => {
-            const queuedImage = {
-              id: Date.now() + Math.random() + index,
-              file: file,
+          if (this.batchAll && files.length > 1) {
+            // Create a single batch item in the queue
+            const queuedBatch = {
+              id: Date.now() + Math.random(),
+              files: files,
+              name: `${files[0].name} (等${files.length}個檔案)`,
               addedAt: new Date(),
-              status: 'queued'
+              status: 'queued',
+              isBatch: true
             };
-            this.queuedImages.push(queuedImage);
-          });
+            this.queuedImages.push(queuedBatch);
+          } else {
+            files.forEach((file, index) => {
+              const queuedImage = {
+                id: Date.now() + Math.random() + index,
+                file: file,
+                addedAt: new Date(),
+                status: 'queued'
+              };
+              this.queuedImages.push(queuedImage);
+            });
+          }
           
           console.log(`Queue now has ${this.queuedImages.length} items`);
           
           // If nothing is currently processing, start the first one
+          this.processNextInQueue();
+        },
+
+        processNextInQueue() {
           const processingSteps = ['upload', 'pending', 'detection', 'ocr', 'mask-generation', 'inpainting', 'upscaling', 'translating', 'rendering'];
           const isCurrentlyTranslating = this.queuedImages.some(item =>
             processingSteps.includes(item.status)
@@ -1228,7 +1342,44 @@
           let buffer = new Uint8Array();
 
           const formData = new FormData();
-          formData.append("image", queuedImage.file);
+          
+          // Prepare config for LLM tokens
+          const fullConfig = {
+            translator: {
+              translator: this.translator,
+              target_lang: this.targetLanguage,
+            },
+            detector: {
+              detection_size: parseInt(this.detectionResolution) || 1536,
+              detector: this.textDetector,
+              unclip_ratio: parseFloat(this.customUnclipRatio) || 2.3,
+              box_threshold: parseFloat(this.customBoxThreshold) || 0.7,
+            },
+            render: {
+              direction: this.renderTextDirection,
+            },
+            inpainter: {
+              inpainter: this.inpainter,
+              inpainting_size: parseInt(this.inpaintingSize) || 2048,
+            },
+            mask_dilation_offset: parseInt(this.maskDilationOffset) || 30,
+            
+            // Inject LLM Settings from web UI
+            openai_api_key: this.openaiApiKey,
+            openai_api_base: this.openaiApiBase,
+            openai_model: this.openaiModel,
+            gemini_api_key: this.geminiApiKey,
+            gemini_model: this.geminiModel,
+            custom_llm_api_key: this.customLlmApiKey,
+            custom_llm_api_base: this.customLlmApiBase,
+            custom_llm_model: this.customLlmModel,
+          };
+          formData.append("config", JSON.stringify(fullConfig));
+
+          if (queuedImage.isBatch) {
+          } else {
+            formData.append("image", queuedImage.file);
+          }
 
           const config = `{
           "detector": {
@@ -1248,7 +1399,8 @@
             "inpainter": "${this.inpainter}",
             "inpainting_size": ${this.inpaintingSize}
           },
-          "mask_dilation_offset": ${this.maskDilationOffset}
+          "mask_dilation_offset": ${this.maskDilationOffset},
+          "batch_all": ${this.batchAll}
         }`;
 
           formData.append("config", config);
@@ -1358,8 +1510,12 @@
 
           const uploadWithProgress = async (formData) => {
             try {
+              const endpoint = queuedImage.isBatch 
+                ? `${BASE_URI}translate/with-form/batch/stream/web`
+                : `${BASE_URI}translate/with-form/image/stream/web`;
+                
               const response = await fetch(
-                `${BASE_URI}translate/with-form/image/stream/web`,
+                endpoint,
                 {
                   method: "POST",
                   body: formData,
@@ -1382,7 +1538,17 @@
               const reader = response.body.getReader();
               while (true) {
                 const { done, value } = await reader.read();
-                if (done) break;
+                if (done) {
+                  // 如果流正常結束但沒有觸發 finished，則手動觸發
+                  const processingItemIndex = this.queuedImages.findIndex(item => item.id === queuedImage.id);
+                  if (processingItemIndex !== -1 && 
+                      this.queuedImages[processingItemIndex].status !== 'finished' && 
+                      this.queuedImages[processingItemIndex].status !== 'error') {
+                    console.log('Stream finished, marking as completed');
+                    this.showFinalResult();
+                  }
+                  break;
+                }
                 processChunk(value);
               }
 

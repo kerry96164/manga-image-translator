@@ -21,15 +21,27 @@ class ExecutorInstance(BaseModel):
     async def sent_stream(self, image: Image, config: Config, sender: NotifyType, image_name: str = None):
         await fetch_data_stream("http://"+self.ip+":"+str(self.port)+"/execute/translate", image, config, sender, image_name=image_name)
 
-    async def sent_batch(self, images: List[Image.Image], config: Config, batch_size: int):
+    async def sent_batch(self, images: List[Image.Image], config: Config, batch_size: int, image_names: List[str] = None):
         """发送批量翻译请求"""
-        return await fetch_data("http://"+self.ip+":"+str(self.port)+"/simple_execute/translate_batch", 
-                               {"images": images, "config": config, "batch_size": batch_size})
+        # Ensure images_with_configs format matches MangaTranslator.translate_batch
+        images_with_configs = []
+        for i, img in enumerate(images):
+            name = image_names[i] if image_names and i < len(image_names) else None
+            images_with_configs.append({"image": img, "config": config, "image_name": name})
+            
+        attributes = {"images_with_configs_or_dicts": images_with_configs, "batch_size": batch_size}
+        return await fetch_data("http://"+self.ip+":"+str(self.port)+"/simple_execute/translate_batch", None, config, custom_data=attributes)
 
-    async def sent_batch_stream(self, images: List[Image.Image], config: Config, batch_size: int, sender: NotifyType):
+    async def sent_batch_stream(self, images: List[Image.Image], config: Config, batch_size: int, sender: NotifyType, image_names: List[str] = None):
         """发送批量翻译流式请求"""
-        await fetch_data_stream("http://"+self.ip+":"+str(self.port)+"/execute/translate_batch",
-                               {"images": images, "config": config, "batch_size": batch_size}, config, sender)
+        # Ensure images_with_configs format matches MangaTranslator.translate_batch
+        images_with_configs = []
+        for i, img in enumerate(images):
+            name = image_names[i] if image_names and i < len(image_names) else None
+            images_with_configs.append({"image": img, "config": config, "image_name": name})
+
+        attributes = {"images_with_configs_or_dicts": images_with_configs, "batch_size": batch_size}
+        await fetch_data_stream("http://"+self.ip+":"+str(self.port)+"/execute/translate_batch", None, config, sender, custom_data=attributes)
 
 class Executors:
     def __init__(self):

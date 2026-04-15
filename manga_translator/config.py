@@ -240,6 +240,19 @@ class TranslatorConfig(BaseModel):
     post_check_target_lang_threshold: float = 0.5  
     """Minimum ratio of target language in translation text for ratio check"""
     
+    # LLM Settings
+    openai_api_key: Optional[str] = None
+    openai_api_base: Optional[str] = None
+    openai_model: Optional[str] = None
+    gemini_api_key: Optional[str] = None
+    gemini_model: Optional[str] = None
+    deepseek_api_key: Optional[str] = None
+    deepseek_api_base: Optional[str] = None
+    deepseek_model: Optional[str] = None
+    custom_llm_api_key: Optional[str] = None
+    custom_llm_api_base: Optional[str] = None
+    custom_llm_model: Optional[str] = None
+
     _translator_gen = None
     _gpt_config = None
 
@@ -335,6 +348,10 @@ class Config(BaseModel):
     ocr: OcrConfig = OcrConfig()
     """Ocr configs"""
     # ?
+    batch_all: bool = False
+    """Perform OCR on all images first, then translate all text at once to reduce overhead"""
+    _web_frontend_optimized: bool = False
+    """Flag for web frontend optimized streaming mode"""
     force_simple_sort: bool = False
     """Don't use panel detection for sorting, use a simpler fallback logic instead"""
     kernel_size: int = 3

@@ -32,19 +32,35 @@ class OpenAITranslator(ConfigGPT, CommonTranslator):
     _MAX_SPLIT_ATTEMPTS = 3      # 递归拆分批次的最大层数
     _MAX_TOKENS = 8192           # prompt+completion 的最大 token (可按模型类型调整)
 
-    def __init__(self, check_openai_key=True):
+    def __init__(self, check_openai_key=True, config=None):
+        # 如果提供了 config 物件，則從中獲取 API KEY 等設定
+        api_key = OPENAI_API_KEY
+        api_base = OPENAI_API_BASE
+        model = OPENAI_MODEL
+        
+        if config:
+            if config.openai_api_key:
+                api_key = config.openai_api_key
+            if config.openai_api_base:
+                api_base = config.openai_api_base
+            if config.openai_model:
+                model = config.openai_model
+            elif config.custom_llm_model and args.translator == Translator.chatgpt:
+                # 兼容性：如果使用了 chatgpt 翻譯器但設定了 custom_llm
+                model = config.custom_llm_model
+
         # ConfigGPT 的初始化
-        _CONFIG_KEY = 'chatgpt.' + OPENAI_MODEL
+        _CONFIG_KEY = 'chatgpt.' + model
         ConfigGPT.__init__(self, config_key=_CONFIG_KEY)
         CommonTranslator.__init__(self)
 
-        if not OPENAI_API_KEY and check_openai_key:
+        if not api_key and check_openai_key:
             raise MissingAPIKeyException('OPENAI_API_KEY environment variable required')
 
         # 根据代理与基础URL等参数实例化 openai.AsyncOpenAI 客户端
         client_args = {
-            "api_key": OPENAI_API_KEY,
-            "base_url": OPENAI_API_BASE
+            "api_key": api_key,
+            "base_url": api_base
         }
         if OPENAI_HTTP_PROXY:
             from httpx import AsyncClient

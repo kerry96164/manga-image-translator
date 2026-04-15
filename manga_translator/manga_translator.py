@@ -11,7 +11,7 @@ import sys
 import traceback
 import numpy as np
 from PIL import Image
-from typing import Optional, Any, List
+from typing import Optional, Any, List, Union
 import py3langid as langid
 
 from .config import Config, Colorizer, Detector, Translator, Renderer, Inpainter
@@ -127,6 +127,7 @@ class MangaTranslator:
         self.disable_memory_optimization = params.get('disable_memory_optimization', False)
         # batch_concurrent 會在 parse_init_params 中驗證並設置
         self.batch_concurrent = params.get('batch_concurrent', False)
+        self.batch_all = params.get('batch_all', False)
         
         self.parse_init_params(params)
         self.result_sub_folder = ''
@@ -278,8 +279,11 @@ class MangaTranslator:
         self.models_ttl = params.get('models_ttl', 0)
         self.batch_size = params.get('batch_size', 1)  # 新增批次大小參數
         
+        # 批量處理全體 (batch_all) 模式下，batch_size 會被設置為總圖片數量
+        self.batch_all = params.get('batch_all', False)
+        
         # 驗證 batch_concurrent 參數
-        if self.batch_concurrent and self.batch_size < 2:
+        if self.batch_concurrent and self.batch_size < 2 and not self.batch_all:
             logger.warning('--batch-concurrent requires --batch-size to be at least 2. When batch_size is 1, concurrent mode has no effect.')
             logger.info('Suggestion: Use --batch-size 2 (or higher) with --batch-concurrent, or remove --batch-concurrent flag.')
             # 自動停用並發模式
@@ -311,7 +315,7 @@ class MangaTranslator:
         
 
         
-    def _set_image_context(self, config: Config, image=None):
+    def _set_image_context(self, config: Config, image=None, image_name: str = None):
         """設置當前處理圖片的上下文資訊，用於產生除錯圖片子資料夾"""
         from .utils.generic import get_image_md5
 
@@ -321,18 +325,24 @@ class MangaTranslator:
         target_lang = getattr(config.translator, 'target_lang', 'unknown')
         translator = getattr(config.translator, 'translator', 'unknown')
 
-        # 計算圖片 MD5 哈希值
-        if image is not None:
-            file_md5 = get_image_md5(image)
+        # 如果提供 image_name，提取原始檔名 (不含擴展名)
+        if image_name:
+            # 取得檔名主體
+            base_filename = os.path.splitext(os.path.basename(image_name))[0]
+            # 產生子資料夾名：{base_filename}-{target_lang}-{translator}
+            subfolder_name = f"{base_filename}-{target_lang}-{translator}"
         else:
-            file_md5 = "unknown"
-
-        # 產生子資料夾名：{timestamp}-{file_md5}-{detection_size}-{target_lang}-{translator}
-        subfolder_name = f"{timestamp}-{file_md5}-{detection_size}-{target_lang}-{translator}"
+            # 計算圖片 MD5 哈希值作為後備
+            if image is not None:
+                file_md5 = get_image_md5(image)
+            else:
+                file_md5 = "unknown"
+            # 產生子資料夾名：{timestamp}-{file_md5}-{detection_size}-{target_lang}-{translator}
+            subfolder_name = f"{timestamp}-{file_md5}-{detection_size}-{target_lang}-{translator}"
 
         self._current_image_context = {
             'subfolder': subfolder_name,
-            'file_md5': file_md5,
+            'file_md5': get_image_md5(image) if image is not None else "unknown",
             'config': config
         }
         
@@ -384,7 +394,7 @@ class MangaTranslator:
         ctx.image_name = image_name
 
         # 設置圖片上下文以產生除錯圖片子資料夾
-        self._set_image_context(config, image)
+        self._set_image_context(config, image, image_name)
         
         # 儲存 debug 資料夾資訊到 Context 中（用於 Web 模式的快取存取）
         # 在 web 模式下總是儲存，不僅僅是 verbose 模式
@@ -515,8 +525,12 @@ class MangaTranslator:
         try:
             ctx.textlines = await self._run_ocr(config, ctx)
             
-            # Web模式優化：將 OCR 辨識到的原文傳送給前端，用於前端彙整批次翻譯
+            # Web模式優化：將 OCR 辨識到的原文傳送給前端，並在背景預先載入模型
             if hasattr(self, '_is_streaming_mode') and self._is_streaming_mode:
+                # 在等待翻譯結果回傳時，可以先進行下一張圖片的辨識準備（預加載模型）
+                if (self.models_ttl > 0):
+                    asyncio.create_task(prepare_translation(config.translator.translator_gen))
+                
                 if ctx.textlines:
                     # 彙整所有 textline 的文字
                     ocr_texts = [line.text for line in ctx.textlines]
@@ -676,7 +690,7 @@ class MangaTranslator:
                 logger.debug(f"Exception details: {traceback.format_exc()}")
 
         # Web 串流模式優化：儲存 final.png 並使用佔位符
-        if ctx.result and not self.result_sub_folder and hasattr(self, '_is_streaming_mode') and self._is_streaming_mode:
+        if ctx.result and not self.result_sub_folder and (getattr(self, '_is_streaming_mode', False) or (config and getattr(config, '_web_frontend_optimized', False))):
             # 儲存 final.png 檔案
             final_img = np.array(ctx.result)
             if len(final_img.shape) == 3:  # 彩色圖片，轉換 BGR 順序
@@ -1526,25 +1540,33 @@ class MangaTranslator:
 
         self.add_progress_hook(ph)
 
-    async def translate_batch(self, images_with_configs: List[tuple], batch_size: int = None, image_names: List[str] = None) -> List[Context]:
+    async def translate_batch(self, items: List[Union[tuple, dict]], batch_size: int = None, image_names: List[str] = None) -> List[Context]:
         """
         批次翻譯多張圖片，在翻譯階段進行批次處理以提高效率。
         
         Args:
-            images_with_configs: (圖片, 配置) 元組的列表 (List of (image, config) tuples)。
+            items: (圖片, 配置) 元組的列表，或是包含 image, config, image_name 的字典列表。
             batch_size: 批次大小，如果為 None 則使用實例的 batch_size。
             image_names: 已棄用的參數，保留用於相容性。
             
         Returns:
             包含翻譯結果的 Context 物件列表。
         """
+        # 標準化輸入
+        images_with_configs = []
+        for item in items:
+            if isinstance(item, dict):
+                images_with_configs.append((item['image'], item['config'], item.get('image_name')))
+            else:
+                images_with_configs.append((item[0], item[1], None))
+
         batch_size = batch_size or self.batch_size
         if batch_size <= 1:
             # 不使用批次處理時，回到原有的逐個處理方式
             logger.debug('Batch size <= 1, switching to individual processing mode')
             results = []
-            for i, (image, config) in enumerate(images_with_configs):
-                ctx = await self.translate(image, config)  # 單頁翻譯時正常儲存上下文
+            for i, (image, config, name) in enumerate(images_with_configs):
+                ctx = await self.translate(image, config, image_name=name)  # 單頁翻譯時正常儲存上下文
                 results.append(ctx)
             return results
         
@@ -1561,9 +1583,14 @@ class MangaTranslator:
         logger.debug('Starting pre-processing phase...')
         pre_translation_contexts = []
         
-        for i, (image, config) in enumerate(images_with_configs):
+        for i, (image, config, name) in enumerate(images_with_configs):
             logger.debug(f'Pre-processing image {i+1}/{len(images_with_configs)}')
             
+            # 如果啟用了 batch_all，強制在此步驟將 translator 設為 none，避免單頁翻譯
+            original_translator = config.translator.translator
+            if self.batch_all:
+                config.translator.translator = Translator.none
+
             # 簡化的記憶體檢查
             if memory_optimization_enabled:
                 try:
@@ -1582,12 +1609,17 @@ class MangaTranslator:
                 
             try:
                 # 為批次處理中的每張圖片設定上下文
-                self._set_image_context(config, image)
+                self._set_image_context(config, image, name)
                 # 儲存圖片上下文，確保後處理階段使用相同的資料夾
                 if self._current_image_context:
                     image_md5 = self._current_image_context['file_md5']
                     self._save_current_image_context(image_md5)
-                ctx = await self._translate_until_translation(image, config)
+                ctx = await self._translate_until_translation(image, config, image_name=name)
+
+                # 如果啟用了 batch_all，還原翻譯器設定供後續批次階段使用
+                if self.batch_all:
+                    config.translator.translator = original_translator
+
                 # 儲存圖片上下文到 Context 物件中，用於後續批次處理
                 if self._current_image_context:
                     ctx.image_context = self._current_image_context.copy()
@@ -1615,11 +1647,20 @@ class MangaTranslator:
                     
                     # 重新設定圖片上下文
                     self._set_image_context(recovery_config, image)
+                    # 如果啟用了 batch_all，強制在此步驟將 translator 設為 none
+                    if self.batch_all:
+                        recovery_config.translator.translator = Translator.none
+
                     # 儲存 fallback 圖片上下文
                     if self._current_image_context:
                         image_md5 = self._current_image_context['file_md5']
                         self._save_current_image_context(image_md5)
                     ctx = await self._translate_until_translation(image, recovery_config)
+
+                    # 還原翻譯器設定
+                    if self.batch_all:
+                        recovery_config.translator.translator = original_translator
+
                     # 儲存圖片上下文到 Context 物件中
                     if self._current_image_context:
                         ctx.image_context = self._current_image_context.copy()
@@ -1731,13 +1772,14 @@ class MangaTranslator:
         
         return results
 
-    async def _translate_until_translation(self, image: Image.Image, config: Config) -> Context:
+    async def _translate_until_translation(self, image: Image.Image, config: Config, image_name: str = None) -> Context:
         """
         执行翻译之前的所有步骤（彩色化、上采样、检测、OCR、文本行合并）
         """
         ctx = Context()
         ctx.input = image
         ctx.result = None
+        ctx.image_name = image_name
         
         # 儲存原始輸入圖片用於除錯
         if self.verbose:
@@ -2743,7 +2785,25 @@ class MangaTranslator:
             
         # 將所有翻譯合併為一個文字進行檢測
         merged_text = ''.join(all_translations)
+
+        try:
+            detected_lang, confidence = langid.classify(merged_text)
+            detected_language = ISO_639_1_TO_VALID_LANGUAGES.get(detected_lang, 'UNKNOWN').upper()
+        except Exception as e:
+            detected_language = 'UNKNOWN'
+
+        # --- 關鍵修正：繁簡中文模糊匹配 ---
+        target_lang_upper = target_lang.upper()
         
+        # 定義「中文語系家族」
+        chinese_variants = ['CHT', 'CHS', 'ZH', 'CHINESE']
+        
+        # 如果 目標語言 是中文，且 偵測結果 也是中文（不論繁簡）
+        if target_lang_upper in chinese_variants and detected_language in ['CHS', 'CHT', 'CHINESE', 'ZH']:
+            logger.info(f"檢測到中文變體匹配 (目標: {target_lang_upper}, 檢測: {detected_language})，判定為通過。")
+            return True
+        logger.debug(f'語言檢測結果：{detected_language}，置信度：{confidence}，是否包含假名：{has_kana}')
+
         # 使用 py3langid 進行語言檢測
         try:
             detected_lang, confidence = langid.classify(merged_text)

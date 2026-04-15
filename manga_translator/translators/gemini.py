@@ -85,10 +85,24 @@ class GeminiTranslator(CommonGPTTranslator):
     _CACHE_TTL = 3600 # Set the Context Cache lifespan (seconds)
     _CACHE_TTL_BUFFER = 300 # Refresh the Context Cache once current time is within this many seconds of expiring
 
-    def __init__(self):
+    def __init__(self, config=None):
+        # 如果提供了 config 物件，則從中獲取 API KEY 等設定
+        api_key = GEMINI_API_KEY
+        model = GEMINI_MODEL
+        
+        if config:
+            if config.gemini_api_key:
+                api_key = config.gemini_api_key
+            if config.gemini_model:
+                model = config.gemini_model
+            elif config.custom_llm_model and args.translator == Translator.gemini:
+                # 兼容性：如果使用了 gemini 翻譯器但設定了 custom_llm
+                model = config.custom_llm_model
+
+
         # ConfigGPT 的初始化
         # ConfigGPT initialization 
-        _CONFIG_KEY = 'gemini.' + GEMINI_MODEL
+        _CONFIG_KEY = 'gemini.' + model
         CommonGPTTranslator.__init__(self, config_key=_CONFIG_KEY)
 
         # Initialize colorama for ANSI encoding support
@@ -103,13 +117,13 @@ class GeminiTranslator(CommonGPTTranslator):
         # Dict for storing values to print to logger
         self.cachedVals={None}
 
-        if not GEMINI_API_KEY:
+        if not api_key:
             raise MissingAPIKeyException(
                         'Please set the GEMINI_API_KEY environment variable '
                         'before using the Gemini translator.'
                     )
 
-        self.client = genai.Client(api_key=GEMINI_API_KEY)
+        self.client = genai.Client(api_key=api_key)
 
         try:
             model_list=list(self.client.models.list())

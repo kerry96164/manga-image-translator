@@ -44,20 +44,39 @@ class DeepseekTranslator(CommonGPTTranslator):
     # 是否包含模板，用于决定是否使用预设的提示模板
     _INCLUDE_TEMPLATE = False
 
-    def __init__(self, check_openai_key=True):
+    def __init__(self, check_openai_key=True, config=None):
+        _api_key = DEEPSEEK_API_KEY
+        _api_base = DEEPSEEK_API_BASE
+        _model = DEEPSEEK_MODEL
+
+        if config:
+            if config.deepseek_api_key:
+                _api_key = config.deepseek_api_key
+            elif config.openai_api_key:
+                _api_key = config.openai_api_key
+            
+            if config.deepseek_api_base:
+                _api_base = config.deepseek_api_base
+            elif config.openai_api_base:
+                _api_base = config.openai_api_base
+
+            if config.deepseek_model:
+                _model = config.deepseek_model
+            elif config.openai_model:
+                _model = config.openai_model
+
         # CommonGPTTranslator 的初始化
         # CommonGPTTranslator initialization 
-        _CONFIG_KEY = 'deepseek.' + DEEPSEEK_MODEL
+        _CONFIG_KEY = 'deepseek.' + _model
         CommonGPTTranslator.__init__(self, config_key=_CONFIG_KEY)
 
         # Initialize the token counter
         self.tokenizer = deepseekTokenCounter()
 
-        self.client = openai.AsyncOpenAI(api_key=openai.api_key or DEEPSEEK_API_KEY)
+        self.client = openai.AsyncOpenAI(api_key=_api_key, base_url=_api_base)
         if not self.client.api_key and check_openai_key:
             raise MissingAPIKeyException('DEEPSEEK_API_KEY environment variable required')
             
-        self.client.base_url = DEEPSEEK_API_BASE
         self.token_count = 0
         self.token_count_last = 0
         self.config = None

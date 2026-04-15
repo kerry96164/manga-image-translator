@@ -96,6 +96,8 @@ def general_parser(g_parser):
     g_parser.add_argument('--context-size', default=0, type=int, help='Pages of context are needed for translating the current page')
     g_parser.add_argument('--batch-size', default=1, type=int,
                         help='Number of images to process in each batch for translation. Default is 1 (no batching)')
+    g_parser.add_argument('--batch-all', action='store_true',
+                        help='Perform OCR on all images first, then translate all text at once to reduce overhead')
     g_parser.add_argument('--batch-concurrent', action='store_true',
                         help='Use concurrent mode for batch translation - process each image separately instead of merging into large batches. Helps prevent model output truncation and hallucination.')
     g_parser.add_argument('--disable-memory-optimization', action='store_true',

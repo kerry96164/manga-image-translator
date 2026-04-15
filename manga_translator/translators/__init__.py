@@ -71,9 +71,16 @@ translator_cache = {}
 def get_translator(key: Translator, *args, **kwargs) -> CommonTranslator:
     if key not in TRANSLATORS:
         raise ValueError(f'Could not find translator for: "{key}". Choose from the following: %s' % ','.join(TRANSLATORS))
+    
+    # 如果 kwargs 中有名為 'config' 的參數，我們不快取翻譯器，或者根據 config 的內容進行快取
+    # 這裡選擇簡單起見，在有 config 時不使用快取
+    if 'config' in kwargs and kwargs['config'] is not None:
+        translator_class = TRANSLATORS[key]
+        return translator_class(*args, **kwargs)
+
     if not translator_cache.get(key):
-        translator = TRANSLATORS[key]
-        translator_cache[key] = translator(*args, **kwargs)
+        translator_class = TRANSLATORS[key]
+        translator_cache[key] = translator_class(*args, **kwargs)
     return translator_cache[key]
 
 prepare_selective_translator(get_translator)
@@ -98,7 +105,7 @@ async def dispatch(chain: TranslatorChain, queries: List[str], translator_config
             #if text_lang == lang:
                 #translator = get_translator(key)
             #if translator is None:
-            translator = get_translator(chain.translators[flag])
+            translator = get_translator(chain.translators[flag], config=translator_config)
             if isinstance(translator, OfflineTranslator):
                 await translator.load('auto', chain.langs[flag], device)
                 pass
@@ -114,7 +121,7 @@ async def dispatch(chain: TranslatorChain, queries: List[str], translator_config
     if args is not None:
         args['translations'] = {}
     for key, tgt_lang in chain.chain:
-        translator = get_translator(key)
+        translator = get_translator(key, config=translator_config)
         if isinstance(translator, OfflineTranslator):
             await translator.load('auto', tgt_lang, device)
         if translator_config:

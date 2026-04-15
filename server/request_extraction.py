@@ -72,6 +72,24 @@ async def while_streaming(req: Request, transform, config: Config, image: bytes 
     asyncio.create_task(wait_in_queue(task, notify_internal))
     return streaming_response
 
+async def while_batch_streaming(req: Request, transform, config: Config, images: list[bytes | str], image_names: list[str] = None, batch_size: int = 4):
+    pil_images = []
+    for img in images:
+        pil_img = await to_pil_image(img)
+        pil_images.append(pil_img)
+
+    task = BatchQueueElement(req, pil_images, config, batch_size, image_names=image_names)
+    task_queue.add_task(task)
+
+    messages = asyncio.Queue()
+
+    def notify_internal(code: int, data: bytes) -> None:
+        notify(code, data, transform, messages)
+    
+    streaming_response = StreamingResponse(stream(messages), media_type="application/octet-stream")
+    asyncio.create_task(wait_in_queue(task, notify_internal))
+    return streaming_response
+
 async def get_batch_ctx(req: Request, config: Config, images: list[str|bytes], batch_size: int = 4):
     """Process batch translation request"""
     # Convert images to PIL Image objects

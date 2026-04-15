@@ -80,6 +80,7 @@ class MangaTranslatorLocal(MangaTranslator):
         self.save_text = params.get('save_text', None)
         self.prep_manual = params.get('prep_manual', None)
         self.batch_size = params.get('batch_size', 1)
+        self.batch_all = params.get('batch_all', False)
         self.disable_memory_optimization = params.get('disable_memory_optimization', False)
 
     async def translate_path(self, path: str, dest: str = None, params: dict[str, Union[int, str]] = None):
@@ -151,7 +152,7 @@ class MangaTranslatorLocal(MangaTranslator):
                 raise FileExistsError(_dest)
 
             # 检查是否使用批量处理
-            if self.batch_size > 1:
+            if self.batch_size > 1 or self.batch_all:
                 await self._translate_folder_batch(path, _dest, params, config, file_ext)
             else:
                 # 原有的逐个处理方式
@@ -376,6 +377,11 @@ class MangaTranslatorLocal(MangaTranslator):
             return
             
         logger.info(f'Found {len(image_tasks)} images to translate')
+        
+        # 批量處理全體 (batch_all) 模式下，一次處理所有任務
+        if self.batch_all:
+            self.batch_size = len(image_tasks)
+            logger.info(f'Batch all mode enabled: updating batch size to {self.batch_size}')
         
         # 简化的内存优化策略
         base_batch_size = self.batch_size

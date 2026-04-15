@@ -31,7 +31,28 @@ class CustomOpenAiTranslator(ConfigGPT, CommonTranslator):
     # 是否包含模板，用于决定是否使用预设的提示模板
     _INCLUDE_TEMPLATE = False
 
-    def __init__(self, model=None, api_base=None, api_key=None, check_openai_key=False):
+    def __init__(self, model=None, api_base=None, api_key=None, check_openai_key=False, config=None):
+        # 如果提供了 config 物件，則從中獲取 API KEY 等設定
+        _api_key = api_key or CUSTOM_OPENAI_API_KEY or "ollama"
+        _api_base = api_base or CUSTOM_OPENAI_API_BASE
+        _model = model or CUSTOM_OPENAI_MODEL
+        
+        if config:
+            if config.custom_llm_api_key:
+                _api_key = config.custom_llm_api_key
+            elif config.openai_api_key:
+                _api_key = config.openai_api_key
+                
+            if config.custom_llm_api_base:
+                _api_base = config.custom_llm_api_base
+            elif config.openai_api_base:
+                _api_base = config.openai_api_base
+                
+            if config.custom_llm_model:
+                _model = config.custom_llm_model
+            elif config.openai_model:
+                _model = config.openai_model
+
         # If the user has specified a nested key to use for the model, append the key
         #   Otherwise: Use the `ollama` defaults.
         _CONFIG_KEY='ollama'
@@ -39,10 +60,10 @@ class CustomOpenAiTranslator(ConfigGPT, CommonTranslator):
             _CONFIG_KEY+=f".{CUSTOM_OPENAI_MODEL_CONF}"
 
         ConfigGPT.__init__(self, config_key=_CONFIG_KEY)
-        self.model = model
+        self.model = _model
         CommonTranslator.__init__(self)
-        self.client = openai.AsyncOpenAI(api_key=api_key or CUSTOM_OPENAI_API_KEY or "ollama") # required, but unused for ollama
-        self.client.base_url = api_base or CUSTOM_OPENAI_API_BASE
+        self.client = openai.AsyncOpenAI(api_key=_api_key) # required, but unused for ollama
+        self.client.base_url = _api_base
         self.token_count = 0
         self.token_count_last = 0
 
